@@ -9,14 +9,27 @@
 import SpriteKit
 import GameplayKit
 
+enum GameState {
+    case initial
+    case redTurn
+    case blueTurn
+    case ballMoving
+}
+
 class GameScene: SKScene, SKPhysicsContactDelegate {
-    
+
+    // MARK: - Estado del juego
+    private var gameState: GameState = .initial
+   
     // MARK: - Referencias a nodos de la escena
     private var ball : SKSpriteNode?
     private var playerTouch : SKSpriteNode?
     private var blueScoreboard : SKLabelNode?
     private var redScoreboard : SKLabelNode?
 
+    private var redWins: SKLabelNode?
+    private var blueWins: SKLabelNode?
+    
     // MARK: Marcadores de los jugadores
     private var blueScore : Int = 0
     private var redScore : Int = 0
@@ -50,6 +63,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         self.ball?.physicsBody!.contactTestBitMask = ballCategoryMask
         self.redScoreboard = self.childNode(withName: "red_score") as? SKLabelNode
         self.blueScoreboard = self.childNode(withName: "blue_score") as? SKLabelNode
+        self.blueWins = self.childNode(withName: "blue_wins") as? SKLabelNode
+        self.redWins = self.childNode(withName: "red_wins") as? SKLabelNode
         
         self.playerTouch = self.childNode(withName: "player_touch") as? SKSpriteNode
         self.playerTouch?.physicsBody?.contactTestBitMask = ballCategoryMask
@@ -58,8 +73,30 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         self.createSceneLimits()
         self.setPlayers()
         self.updateScore()
+        self.selectInitialPlayer()
     }
     
+    func selectInitialPlayer() {
+        let isRedTurn = Int.random(in: 1...2) == 1
+        if isRedTurn {
+            gameState = .redTurn
+        } else {
+            gameState = .blueTurn
+        }
+        showPlayerTurn()
+    }
+    
+    func showPlayerTurn(){
+        if gameState == .redTurn {
+            redWins?.isHidden = false
+            redWins?.text = "Red turn"
+            redWins?.run(SKAction.sequence([SKAction.repeat(SKAction.sequence([SKAction.scale(to: CGFloat(0.8), duration: 0.2), SKAction.scale(to: 1, duration: 0.2)]), count: 3), SKAction.hide()]))
+        } else {
+            blueWins?.isHidden = false
+            blueWins?.text = "Blue turn"
+            blueWins?.run(SKAction.sequence([SKAction.repeat(SKAction.sequence([SKAction.scale(to: CGFloat(0.8), duration: 0.2), SKAction.scale(to: 1, duration: 0.2)]), count: 3), SKAction.hide()]))
+        }
+    }
     
     func createSceneLimits() {
         self.physicsBody = SKPhysicsBody(edgeLoopFrom: self.frame)
@@ -180,6 +217,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                                y:(self.frame.minY + self.frame.maxY) / 2)
       
         if let ball = ball {
+            let isBallMoving = ball.physicsBody!.velocity.dy > 4 || ball.physicsBody!.velocity.dx > 4
             if Int(ball.position.y) > Int(scene!.frame.maxY) {
                 self.blueScore += 1
                 
@@ -199,9 +237,43 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                      colorTexto: self.redColor,
                      spawnPos: spawnPos)
             }
-           
+            
+            if ball.position.x > frame.maxX || ball.position.x < frame.minX || ball.position.y > frame.maxY || ball.position.y < frame.minY {
+                resetPuck(pos: CGPoint(x: 0, y:0))
+                showPlayerTurn()
+            }
+            
+            
+            if gameState != .ballMoving && isBallMoving {
+                gameState = .ballMoving
+            }
+            
+            if gameState == .ballMoving && !isBallMoving {
+                self.selectNextPlayer()
+            }
+            
         }
        
+    }
+    
+    func selectNextPlayer() {
+        if let ball = ball {
+            
+            let ballPosition = ball.position
+            let redPlayers = RedPlayers(frame: self.frame)
+            let bluePlayers = BluePlayers(frame: self.frame)
+            
+            let closestRedPlayer: Double = redPlayers.closestPlayer(to: ballPosition)
+            let closestBluePlayer: Double = bluePlayers.closestPlayer(to: ballPosition)
+            
+            if closestRedPlayer < closestBluePlayer {
+                gameState = .redTurn
+            } else {
+                gameState = .blueTurn
+            }
+            
+            showPlayerTurn()
+        }
     }
 
     func updateScore() {
@@ -227,28 +299,28 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     func goal(score: Int, marcador: SKLabelNode, textoWin : String, colorTexto : UIColor, spawnPos: CGPoint) {
-        // DONE [D03] Reproducir sobre la escena la acción `actionSoundGoal`
         run(actionSoundGoal)
         updateScore()
         
         let actionSeq = SKAction.repeat(SKAction.sequence([SKAction.scale(to: CGFloat(1.2), duration: 0.1), SKAction.scale(to: CGFloat(1.0), duration: 0.01)]), count: 3)
         
         marcador.run(actionSeq)
-         resetPuck(pos: spawnPos)
+        resetPuck(pos: spawnPos)
         
         if( score == maxScore ){
-             let labelNode = colorTexto == self.redColor ? scene?.childNode(withName: "red_wins") : scene?.childNode(withName: "blue_wins")
+             let labelNode = colorTexto == self.redColor ? self.redWins : self.blueWins
             labelNode?.isHidden = false
             
-            //      - Eliminamos el disco de la escena (eliminandolo de su nodo padre) y lo ponemos a nil
             self.ball?.removeFromParent()
             self.ball = nil
             
-             //      - Ejecutamos una accion que repita 3 veces: escalar a 1.2 durante 0.5s, escalar a 1.0 durante 0.5s, y tras las 3 repeticiones, que ejecute goToTitle().
             marcador.run(SKAction.repeat(SKAction.sequence([SKAction.scale(to: 1.2, duration: 0.5), SKAction.scale(to: 1.0, duration: 0.5) ]), count: 3)){
                 self.goToTitle()
             }
             
+        } else {
+            gameState = colorTexto == self.redColor ? .blueTurn : .redTurn
+            showPlayerTurn()
         }
        
        
@@ -274,69 +346,58 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func touchDown(withTouch t : UITouch) {
-        let coordinates = t.location(in: scene!)
-        
-        self.playerTouch?.physicsBody = SKPhysicsBody(circleOfRadius: 20)
-        self.playerTouch?.physicsBody?.categoryBitMask = playerCategoryMask
-        self.playerTouch?.physicsBody?.collisionBitMask = 3
-        self.playerTouch?.position = coordinates
-        self.activeTouches[t] = createDragNode(linkedTo: self.playerTouch!)
-
-    }
-    
-    func touchMoved(withTouch t : UITouch) {
-        // DONE [C06]
-        //  - Obten las coordenadas de t en la escena
-        let coordinates = t.location(in: scene!)
-        //  - Comprueba si hay algun nodo vinculado a t en self.activeTouches
-        if(self.activeTouches[t] != nil){
-            //  - Si es asi, mueve el nodo a la posicion de t
-            self.activeTouches[t]?.position = coordinates
+        if gameState != .ballMoving {
+            let coordinates = t.location(in: scene!)
+            
+            self.playerTouch?.physicsBody = SKPhysicsBody(circleOfRadius: 20)
+            self.playerTouch?.physicsBody?.categoryBitMask = playerCategoryMask
+            self.playerTouch?.physicsBody?.collisionBitMask = 3
+            self.playerTouch?.position = coordinates
+            self.activeTouches[t] = createDragNode(linkedTo: self.playerTouch!)
         }
         
     }
     
+    func touchMoved(withTouch t : UITouch) {
+        if gameState != .ballMoving {
+            let coordinates = t.location(in: scene!)
+            
+            if(self.activeTouches[t] != nil){
+                self.activeTouches[t]?.position = coordinates
+            }
+        }
+    }
+    
     func touchUp(withTouch t : UITouch) {
-        // DONE [C07]
-        //  - Elimina la entrada t del diccionario self.activeTouches.
-       
-        // DONE [C10] Comprueba si hay algun nodo vinculado a t, y en tal caso eliminalo de la escena
         let node = activeTouches[t]
         if(node != nil){
             node?.removeFromParent()
+            activeTouches.removeValue(forKey: t)
         }
         playerTouch?.physicsBody?.categoryBitMask = 1000
     }
     
     
     func createDragNode(linkedTo paddle: SKNode) -> SKNode {
-        // DONE [C08]
-        //  - Crea un nodo de tipo forma circular con radio `20`, situado en la posición del nodo paddle, añadelo a la escena.
         let circularNode = SKShapeNode(circleOfRadius: 20)
         circularNode.position = paddle.position
         scene?.addChild(circularNode)
-        //  - Asocia a dicho nodo un cuerpo físico estático, y desactiva su propiedad `isUserInteractionEnabled`
+
         circularNode.physicsBody = .init(circleOfRadius: 20)
         circularNode.physicsBody?.isDynamic = false
         circularNode.isUserInteractionEnabled = false
-        //  - Crea una conexión de tipo `SKPhysicsJointSpring` que conecte el nodo creado con paddle, con frequency 100.0 y damping 10.0.
 
         let joint = SKPhysicsJointSpring.joint(withBodyA: paddle.physicsBody!, bodyB: circularNode.physicsBody!, anchorA: paddle.position, anchorB: circularNode.position)
         joint.damping = 10.0
         joint.frequency = 100.0
         
-        //  - Agrega la conexión al `physicsWorld` de la escena.
         scene?.physicsWorld.add(joint)
-        //  - Devuelve el nodo que hemos creado
   
         return circularNode
     }
     
     
     // MARK: - Metodos de SKPhysicsContactDelegate
-    
-    // TODO [D06] Define el método didBegin(:). En caso de que alguno de los cuerpos que intervienen en el contacto sea el disco (' puck'), reproduce el audio `actionSoundHit`
-    
     func didBegin(_ contact: SKPhysicsContact) {
         if contact.bodyA.node?.name == "ball" || contact.bodyB.node?.name == "ball" {
             run(actionSoundHit)

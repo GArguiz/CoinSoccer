@@ -28,5 +28,18 @@ class RedPlayers {
         ]
     }
     
+    func closestPlayer(to: CGPoint) -> Double {
+        var minDistance = Double.infinity
+        
+        for player in players {
+            let playerDistance = player.distance(to: to)
+            if minDistance > playerDistance {
+                minDistance = playerDistance
+            }
+        }
+        
+        return minDistance
+        
+    }
 }
 
