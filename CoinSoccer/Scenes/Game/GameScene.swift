@@ -8,6 +8,7 @@
 
 import SpriteKit
 import GameplayKit
+import GameKit
 
 enum GameState {
     case initial
@@ -17,6 +18,10 @@ enum GameState {
 }
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
+    
+    private let preferences = UserDefaults()
+    private let IS_FIRST_GOAL_ACCOMPLISHED = "IS_FIRST_GOAL_ACCOMPLISHED"
+    private var isFirstGoalAccomplished = false
 
     // MARK: - Estado del juego
     private var gameState: GameState = .initial
@@ -57,6 +62,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     override func didMove(to view: SKView) {
         
+        isFirstGoalAccomplished = preferences.bool(forKey: "IS_FIRST_GOAL_ACCOMPLISHED")
+        logInGameCenter()
         
         // DONE [B04] Obten las referencias a los nodos de la escena
         self.ball = self.childNode(withName: "ball") as? SKSpriteNode
@@ -238,7 +245,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                      spawnPos: spawnPos)
             }
             
-            if ball.position.x > frame.maxX || ball.position.x < frame.minX || ball.position.y > frame.maxY || ball.position.y < frame.minY {
+            if ball.position.x > frame.maxX || ball.position.x < frame.minX {
                 resetPuck(pos: CGPoint(x: 0, y:0))
                 showPlayerTurn()
             }
@@ -307,6 +314,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         marcador.run(actionSeq)
         resetPuck(pos: spawnPos)
         
+     
+            self.showFirstGoalAccomplish()
         if( score == maxScore ){
              let labelNode = colorTexto == self.redColor ? self.redWins : self.blueWins
             labelNode?.isHidden = false
@@ -324,6 +333,44 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
        
        
+    }
+    
+    func logInGameCenter(){
+        let player : GKLocalPlayer = GKLocalPlayer.local
+        player.authenticateHandler = {(vc : UIViewController!, error : Error!) -> Void in
+            if(vc != nil) {
+                // No hay usuario de GameCenter, presenta interfaz de autenticación
+                guard let controller = self.view?.window?.rootViewController as? GameViewController else {return}
+                
+                controller.present(vc, animated: true)
+
+            } else if(player.isAuthenticated) {
+               
+            } else {
+                // Error en la autenticación
+            }
+        }
+    }
+    func showFirstGoalAccomplish(){
+        let player : GKLocalPlayer = GKLocalPlayer.local
+        player.authenticateHandler = {(vc : UIViewController!, error : Error!) -> Void in
+            if(vc != nil) {
+                // No hay usuario de GameCenter, presenta interfaz de autenticación
+            } else if(player.isAuthenticated) {
+                let achievement = GKAchievement(identifier: "get_first_goal")
+                achievement.percentComplete = 100
+                achievement.showsCompletionBanner = true
+                GKAchievement.report([achievement]) { (error) in
+                    if error != nil {
+                        print("\(error)")
+                    } else {
+                    }
+                }
+                 //
+            } else {
+                // Error en la autenticación
+            }
+        }
     }
     
     
