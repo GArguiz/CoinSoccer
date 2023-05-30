@@ -19,6 +19,7 @@ enum GameState {
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
     
+    let player : GKLocalPlayer = GKLocalPlayer.local
     private let preferences = UserDefaults()
     private let IS_FIRST_GOAL_ACCOMPLISHED = "IS_FIRST_GOAL_ACCOMPLISHED"
     private var isFirstGoalAccomplished = false
@@ -220,43 +221,50 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - Metodos del ciclo del juego
     
     override func update(_ currentTime: TimeInterval) {
+        
+       
+        
        let spawnPos = CGPoint(x:(self.frame.minX + self.frame.maxX) / 2,
                                y:(self.frame.minY + self.frame.maxY) / 2)
-      
         if let ball = ball {
+            let didBlueScore = Int(ball.position.y) > Int(scene!.frame.maxY)
+            let didRedScore = Int(ball.position.y) < Int(scene!.frame.minY)
             let isBallMoving = ball.physicsBody!.velocity.dy > 4 || ball.physicsBody!.velocity.dx > 4
-            if Int(ball.position.y) > Int(scene!.frame.maxY) {
-                self.blueScore += 1
+          
+            if (didBlueScore || didRedScore){
+                if didBlueScore {
+                    self.blueScore += 1
+                    
+                    goal(score: self.blueScore,
+                         marcador: self.blueScoreboard!,
+                         textoWin: "BLUE WINS!",
+                         colorTexto: self.blueColor,
+                         spawnPos: spawnPos)
+                }
                 
-                goal(score: self.blueScore,
-                     marcador: self.blueScoreboard!,
-                     textoWin: "BLUE WINS!",
-                     colorTexto: self.blueColor,
-                     spawnPos: spawnPos)
-            }
-            
-            if Int(ball.position.y) < Int(scene!.frame.minY) {
-                self.redScore += 1
+                if didRedScore {
+                    self.redScore += 1
+                    
+                    goal(score: self.redScore,
+                         marcador: self.redScoreboard!,
+                         textoWin: "RED WINS!",
+                         colorTexto: self.redColor,
+                         spawnPos: spawnPos)
+                }
+            } else {
+                if ball.position.x > frame.maxX || ball.position.x < frame.minX {
+                    resetPuck(pos: CGPoint(x: 0, y:0))
+                    showPlayerTurn()
+                }
                 
-                goal(score: self.redScore,
-                     marcador: self.redScoreboard!,
-                     textoWin: "RED WINS!",
-                     colorTexto: self.redColor,
-                     spawnPos: spawnPos)
-            }
-            
-            if ball.position.x > frame.maxX || ball.position.x < frame.minX {
-                resetPuck(pos: CGPoint(x: 0, y:0))
-                showPlayerTurn()
-            }
-            
-            
-            if gameState != .ballMoving && isBallMoving {
-                gameState = .ballMoving
-            }
-            
-            if gameState == .ballMoving && !isBallMoving {
-                self.selectNextPlayer()
+                
+                if gameState != .ballMoving && isBallMoving {
+                    gameState = .ballMoving
+                }
+                
+                if gameState == .ballMoving && !isBallMoving {
+                    self.selectNextPlayer()
+                }
             }
             
         }
@@ -315,14 +323,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         resetPuck(pos: spawnPos)
         
      
-            self.showFirstGoalAccomplish()
+        self.showFirstGoalAccomplish()
         if( score == maxScore ){
              let labelNode = colorTexto == self.redColor ? self.redWins : self.blueWins
             labelNode?.isHidden = false
-            
+            labelNode?.text = colorTexto == self.redColor ? "Red Wins" : "Blue Wins"
             self.ball?.removeFromParent()
             self.ball = nil
             
+            self.showFirstGameAccomplish()
             marcador.run(SKAction.repeat(SKAction.sequence([SKAction.scale(to: 1.2, duration: 0.5), SKAction.scale(to: 1.0, duration: 0.5) ]), count: 3)){
                 self.goToTitle()
             }
@@ -336,7 +345,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func logInGameCenter(){
-        let player : GKLocalPlayer = GKLocalPlayer.local
         player.authenticateHandler = {(vc : UIViewController!, error : Error!) -> Void in
             if(vc != nil) {
                 // No hay usuario de GameCenter, presenta interfaz de autenticación
@@ -344,20 +352,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 
                 controller.present(vc, animated: true)
 
-            } else if(player.isAuthenticated) {
-               
-            } else {
-                // Error en la autenticación
             }
         }
     }
     func showFirstGoalAccomplish(){
-        let player : GKLocalPlayer = GKLocalPlayer.local
-        player.authenticateHandler = {(vc : UIViewController!, error : Error!) -> Void in
-            if(vc != nil) {
-                // No hay usuario de GameCenter, presenta interfaz de autenticación
-            } else if(player.isAuthenticated) {
+        if(player.isAuthenticated) {
                 let achievement = GKAchievement(identifier: "get_first_goal")
+                print("\(achievement.debugDescription)")
                 achievement.percentComplete = 100
                 achievement.showsCompletionBanner = true
                 GKAchievement.report([achievement]) { (error) in
@@ -367,11 +368,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                     }
                 }
                  //
-            } else {
-                // Error en la autenticación
             }
-        }
     }
+    
+    func showFirstGameAccomplish(){
+        if(player.isAuthenticated) {
+                let achievement = GKAchievement(identifier: "first_game_finished")
+                achievement.percentComplete = 100
+                achievement.showsCompletionBanner = true
+                GKAchievement.report([achievement]) { (error) in
+                    if error != nil {
+                        print("\(error)")
+                    } else {
+                    }
+                }
+                 //
+            }
+
+    }
+    
     
     
     // MARK: - Eventos de la pantalla tactil
